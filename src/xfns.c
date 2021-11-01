@@ -5685,12 +5685,14 @@ select_visual (struct x_display_info *dpyinfo)
 
       vinfo_template.visualid = XVisualIDFromVisual (dpyinfo->visual);
       vinfo_template.screen = XScreenNumberOfScreen (screen);
-      vinfo = XGetVisualInfo (dpy, VisualIDMask | VisualScreenMask,
+      vinfo_template.depth = 32;
+      vinfo = XGetVisualInfo (dpy, VisualScreenMask | VisualDepthMask,
 			      &vinfo_template, &n_visuals);
       if (n_visuals <= 0)
 	fatal ("Can't get proper X visual info");
 
       dpyinfo->n_planes = vinfo->depth;
+      dpyinfo->visual = vinfo->visual;
       XFree (vinfo);
     }
 }

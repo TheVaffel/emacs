@@ -429,9 +429,12 @@ x_set_cr_source_with_gc_background (struct frame *f, GC gc)
 
   XGetGCValues (FRAME_X_DISPLAY (f), gc, GCBackground, &xgcv);
   color.pixel = xgcv.background;
+
   x_query_colors (f, &color, 1);
-  cairo_set_source_rgb (FRAME_CR_CONTEXT (f), color.red / 65535.0,
-			color.green / 65535.0, color.blue / 65535.0);
+  cairo_set_source_rgba (FRAME_CR_CONTEXT (f), color.red / 65535.0,
+                         color.green / 65535.0, color.blue / 65535.0, f->alpha_background);
+
+  cairo_set_operator (FRAME_CR_CONTEXT (f), CAIRO_OPERATOR_SOURCE);
 }
 
 static const cairo_user_data_key_t xlib_surface_key, saved_drawable_key;
@@ -838,6 +841,56 @@ x_fill_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
 #else
   XFillRectangle (FRAME_X_DISPLAY (f), FRAME_X_DRAWABLE (f),
 		  gc, x, y, width, height);
+#endif
+}
+
+static void
+x_clear_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
+{
+  Display *dpy = FRAME_X_DISPLAY (f);
+#ifdef USE_CAIRO
+  cairo_t *cr;
+  XGCValues xgcv;
+
+  cr = x_begin_cr_clip (f, gc);
+  XGetGCValues (dpy, gc, GCFillStyle | GCStipple, &xgcv);
+  if (xgcv.fill_style == FillSolid
+      /* Invalid resource ID (one or more of the three most
+	 significant bits set to 1) is obtained if the GCStipple
+	 component has never been explicitly set.  It should be
+	 regarded as Pixmap of unspecified size filled with ones.  */
+      || (xgcv.stipple & ((Pixmap) 7 << (sizeof (Pixmap) * CHAR_BIT - 3))))
+    {
+      x_set_cr_source_with_gc_background (f, gc);
+      cairo_rectangle (cr, x, y, width, height);
+      cairo_fill (cr);
+    }
+  else
+    {
+      eassert (xgcv.fill_style == FillOpaqueStippled);
+      eassert (xgcv.stipple != None);
+      x_set_cr_source_with_gc_background (f, gc);
+      cairo_rectangle (cr, x, y, width, height);
+      cairo_fill_preserve (cr);
+
+      cairo_pattern_t *pattern = x_bitmap_stipple (f, xgcv.stipple);
+      if (pattern)
+	{
+	  x_set_cr_source_with_gc_foreground (f, gc);
+	  cairo_clip (cr);
+	  cairo_mask (cr, pattern);
+	}
+    }
+  x_end_cr_clip (f);
+#else
+
+  XGCValues xgcv;
+  XGetGCValues (dpy, gc, GCBackground, &xgcv);
+  XSetBackground (dpy, gc, xgcv.background);
+  XFillRectangle (FRAME_X_DISPLAY (f), FRAME_X_DRAWABLE (f),
+		  gc, x, y, width, height);
+
+  XSetBackground (dpy, gc, xgcv.background);
 #endif
 }
 
@@ -1720,12 +1773,7 @@ x_compute_glyph_string_overhangs (struct glyph_string *s)
 static void
 x_clear_glyph_string_rect (struct glyph_string *s, int x, int y, int w, int h)
 {
-  Display *display = FRAME_X_DISPLAY (s->f);
-  XGCValues xgcv;
-  XGetGCValues (display, s->gc, GCForeground | GCBackground, &xgcv);
-  XSetForeground (display, s->gc, xgcv.background);
-  x_fill_rectangle (s->f, s->gc, x, y, w, h);
-  XSetForeground (display, s->gc, xgcv.foreground);
+  x_clear_rectangle (s->f, s->gc, x, y, w, h);
 }
 
 

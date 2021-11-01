@@ -1318,6 +1318,11 @@ xg_create_frame_widgets (struct frame *f)
                          | GDK_STRUCTURE_MASK
                          | GDK_VISIBILITY_NOTIFY_MASK);
 
+  GdkScreen *screen = gtk_widget_get_screen (wtop);
+  GdkVisual *visual = gdk_screen_get_rgba_visual(screen);
+  gtk_widget_set_visual(wtop, visual);
+  gtk_widget_set_visual(wfixed, visual);
+
   /* Must realize the windows so the X window gets created.  It is used
      by callers of this function.  */
   gtk_widget_realize (wfixed);
@@ -1358,7 +1363,6 @@ xg_create_frame_widgets (struct frame *f)
   g_signal_connect (wtop, "query-tooltip", G_CALLBACK (qttip_cb), f);
 
   {
-    GdkScreen *screen = gtk_widget_get_screen (wtop);
     GtkSettings *gs = gtk_settings_get_for_screen (screen);
     /* Only connect this signal once per screen.  */
     if (! g_signal_handler_find (G_OBJECT (gs),
