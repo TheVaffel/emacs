@@ -4066,6 +4066,8 @@ This function is an internal primitive--use `make-frame' instead.  */)
                          RES_TYPE_NUMBER);
   gui_default_parameter (f, parms, Qalpha, Qnil,
                          "alpha", "Alpha", RES_TYPE_NUMBER);
+  gui_default_parameter (f, parms, Qalpha_background, Qnil,
+			 "alpha_background", "AlphaBackground", RES_TYPE_NUMBER);
 
   if (!NILP (parent_frame))
     {
@@ -6498,6 +6500,8 @@ x_create_tip_frame (struct x_display_info *dpyinfo, Lisp_Object parms)
                          "cursorType", "CursorType", RES_TYPE_SYMBOL);
   gui_default_parameter (f, parms, Qalpha, Qnil,
                          "alpha", "Alpha", RES_TYPE_NUMBER);
+  gui_default_parameter (f, parms, Qalpha_background, Qnil,
+			 "alpha_background", "AlphaBackground", RES_TYPE_NUMBER);
 
   /* Add `tooltip' frame parameter's default value. */
   if (NILP (Fframe_parameter (frame, Qtooltip)))
@@ -7827,6 +7831,7 @@ frame_parm_handler x_frame_parm_handlers[] =
   x_set_z_group,
   x_set_override_redirect,
   gui_set_no_special_glyphs,
+  gui_set_alpha_background,
 };
 
 void

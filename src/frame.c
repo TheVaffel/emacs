@@ -3895,6 +3895,7 @@ static const struct frame_parm_table frame_parms[] =
   {"z-group",			SYMBOL_INDEX (Qz_group)},
   {"override-redirect",		SYMBOL_INDEX (Qoverride_redirect)},
   {"no-special-glyphs",		SYMBOL_INDEX (Qno_special_glyphs)},
+  {"alpha-background",          SYMBOL_INDEX (Qalpha_background)},
 #ifdef NS_IMPL_COCOA
   {"ns-appearance",		SYMBOL_INDEX (Qns_appearance)},
   {"ns-transparent-titlebar",	SYMBOL_INDEX (Qns_transparent_titlebar)},
@@ -5012,6 +5013,34 @@ gui_set_alpha (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
     }
 }
 
+void
+gui_set_alpha_background (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
+{
+  double alpha = 1.0;
+
+  if (NILP (arg))
+    alpha = 1.0;
+  else if (FLOATP (arg))
+      {
+	  alpha = XFLOAT_DATA(arg);
+    printf("Setting alpha background with arg \n");
+	  if (! (0 <= alpha && alpha <= 1.0))
+	      args_out_of_range (make_float(0.0), make_float(1.0));
+      }
+  else if (FIXNUMP (arg))
+      {
+	  EMACS_INT ialpha = XFIXNUM (arg);
+	  if (! (0 <= ialpha && ialpha <= 100))
+	      args_out_of_range (make_fixnum (0), make_fixnum (100));
+	  alpha = ialpha / 100.0;
+      }
+  else
+      wrong_type_argument (Qnumberp, arg);
+
+  f->alpha_background = alpha;
+
+  SET_FRAME_GARBAGED (f);
+}
 
 /**
  * gui_set_no_special_glyphs:
@@ -6079,6 +6108,7 @@ syms_of_frame (void)
 #endif
 
   DEFSYM (Qalpha, "alpha");
+  DEFSYM (Qalpha_background, "alpha-background");
   DEFSYM (Qauto_lower, "auto-lower");
   DEFSYM (Qauto_raise, "auto-raise");
   DEFSYM (Qborder_color, "border-color");
