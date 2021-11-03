@@ -1,3 +1,31 @@
+# Emacs, modified to support transparent background
+
+This Emacs fork adds the possibility of setting a transparent background
+in Emacs. This feature has only been tested (and is only expected to work on)
+a build configured with `GTK3` + `cairo`.
+
+The transparency can be specified via the frame parameter `'alpha-background`.
+Just like the frame parameter `alpha`, the `alpha-background` parameter either
+takes an integer between 0 and 100 or a floating point number
+between 0.0 and 1.0 (both inclusive) as argument. 0 sets the background to be
+completely transparent, while 100 / 1.0 sets it to completely opaque.
+
+The old frame parameter `alpha` makes the entire window transparent, including
+foreground features like text. `alpha-background` is an alternative that
+only makes the background transparent, leaving the text untouched.
+
+From what I've gathered, a feature like this has been desired by various
+members of the Emacs community. It seems to pop up as a topic from time to time
+on the Emacs subreddit and is also mentioned in the Emacs Wiki entry on
+transparency <https://www.emacswiki.org/emacs/TransparentEmacs>
+
+I hope this hack can contribute to the conversation on feasability of a fully-fledged
+background-only-transparency feature in the future.
+
+Håkon Flatval, Nov. 1st 2021
+
+_The original README for Emacs is provided below_
+
 Copyright (C) 2001-2021 Free Software Foundation, Inc.
 See the end of the file for license conditions.
 
