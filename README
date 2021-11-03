@@ -10,6 +10,11 @@ takes an integer between 0 and 100 or a floating point number
 between 0.0 and 1.0 (both inclusive) as argument. 0 sets the background to be
 completely transparent, while 100 / 1.0 sets it to completely opaque.
 
+The background transparency can thus be set e.g. by issuing e.g.
+```
+(set-frame-parameter (selected-frame) 'alpha-background 0.5)
+```
+
 The old frame parameter `alpha` makes the entire window transparent, including
 foreground features like text. `alpha-background` is an alternative that
 only makes the background transparent, leaving the text untouched.
