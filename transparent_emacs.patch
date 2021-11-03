@@ -1,0 +1,236 @@
+diff --git a/src/frame.c b/src/frame.c
+index 289abe2f79..0592168f23 100644
+--- a/src/frame.c
++++ b/src/frame.c
+@@ -3776,6 +3776,7 @@ DEFUN ("set-frame-window-state-change", Fset_frame_window_state_change,
+   {"z-group",			SYMBOL_INDEX (Qz_group)},
+   {"override-redirect",		SYMBOL_INDEX (Qoverride_redirect)},
+   {"no-special-glyphs",		SYMBOL_INDEX (Qno_special_glyphs)},
++  {"alpha-background",          SYMBOL_INDEX (Qalpha_background)},
+ #ifdef NS_IMPL_COCOA
+   {"ns-appearance",		SYMBOL_INDEX (Qns_appearance)},
+   {"ns-transparent-titlebar",	SYMBOL_INDEX (Qns_transparent_titlebar)},
+@@ -4883,6 +4884,34 @@ gui_set_alpha (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
+     }
+ }
+
++void
++gui_set_alpha_background (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
++{
++  double alpha = 1.0;
++
++  if (NILP (arg))
++    alpha = 1.0;
++  else if (FLOATP (arg))
++    {
++      alpha = XFLOAT_DATA(arg);
++      printf("Setting alpha background with arg \n");
++      if (! (0 <= alpha && alpha <= 1.0))
++	args_out_of_range (make_float(0.0), make_float(1.0));
++    }
++  else if (FIXNUMP (arg))
++    {
++      EMACS_INT ialpha = XFIXNUM (arg);
++      if (! (0 <= ialpha && ialpha <= 100))
++	args_out_of_range (make_fixnum (0), make_fixnum (100));
++      alpha = ialpha / 100.0;
++    }
++  else
++    wrong_type_argument (Qnumberp, arg);
++
++  f->alpha_background = alpha;
++
++  SET_FRAME_GARBAGED (f);
++}
+
+ /**
+  * gui_set_no_special_glyphs:
+@@ -5976,6 +6005,7 @@ syms_of_frame (void)
+ #endif
+
+   DEFSYM (Qalpha, "alpha");
++  DEFSYM (Qalpha_background, "alpha-background");
+   DEFSYM (Qauto_lower, "auto-lower");
+   DEFSYM (Qauto_raise, "auto-raise");
+   DEFSYM (Qborder_color, "border-color");
+diff --git a/src/frame.h b/src/frame.h
+index bfe04b276a..7f8ef15ef4 100644
+--- a/src/frame.h
++++ b/src/frame.h
+@@ -623,6 +623,10 @@ #define EMACS_FRAME_H
+      Negative values mean not to change alpha.  */
+   double alpha[2];
+
++  /* Background opacity, currently only tested to work with
++     GTK3+cairo */
++  double alpha_background;
++
+   /* Exponent for gamma correction of colors.  1/(VIEWING_GAMMA *
+      SCREEN_GAMMA) where viewing_gamma is 0.4545 and SCREEN_GAMMA is a
+      frame parameter.  0 means don't do gamma correction.  */
+@@ -1632,6 +1636,7 @@ #define EMACS_CLASS "Emacs"
+ extern long gui_figure_window_size (struct frame *, Lisp_Object, bool, bool, int *, int *);
+
+ extern void gui_set_alpha (struct frame *, Lisp_Object, Lisp_Object);
++extern void gui_set_alpha_background (struct frame *, Lisp_Object, Lisp_Object);
+ extern void gui_set_no_special_glyphs (struct frame *, Lisp_Object, Lisp_Object);
+
+ extern void validate_x_resource_name (void);
+diff --git a/src/gtkutil.c b/src/gtkutil.c
+index 825fbe1d45..efd60768dd 100644
+--- a/src/gtkutil.c
++++ b/src/gtkutil.c
+@@ -1333,6 +1333,11 @@ xg_create_frame_widgets (struct frame *f)
+                          | GDK_STRUCTURE_MASK
+                          | GDK_VISIBILITY_NOTIFY_MASK);
+
++  GdkScreen *screen = gtk_widget_get_screen (wtop);
++  GdkVisual *visual = gdk_screen_get_rgba_visual(screen);
++  gtk_widget_set_visual(wtop, visual);
++  gtk_widget_set_visual(wfixed, visual);
++
+   /* Must realize the windows so the X window gets created.  It is used
+      by callers of this function.  */
+   gtk_widget_realize (wfixed);
+@@ -1373,7 +1378,6 @@ xg_create_frame_widgets (struct frame *f)
+   g_signal_connect (wtop, "query-tooltip", G_CALLBACK (qttip_cb), f);
+
+   {
+-    GdkScreen *screen = gtk_widget_get_screen (wtop);
+     GtkSettings *gs = gtk_settings_get_for_screen (screen);
+     /* Only connect this signal once per screen.  */
+     if (! g_signal_handler_find (G_OBJECT (gs),
+diff --git a/src/xfns.c b/src/xfns.c
+index ab04396703..f4b1771e87 100644
+--- a/src/xfns.c
++++ b/src/xfns.c
+@@ -4082,6 +4082,8 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame,
+                          RES_TYPE_NUMBER);
+   gui_default_parameter (f, parms, Qalpha, Qnil,
+                          "alpha", "Alpha", RES_TYPE_NUMBER);
++  gui_default_parameter (f, parms, Qalpha_background, Qnil,
++			 "alpha_background", "AlphaBackground", RES_TYPE_NUMBER);
+
+   if (!NILP (parent_frame))
+     {
+@@ -5683,12 +5685,14 @@ select_visual (struct x_display_info *dpyinfo)
+
+       vinfo_template.visualid = XVisualIDFromVisual (dpyinfo->visual);
+       vinfo_template.screen = XScreenNumberOfScreen (screen);
+-      vinfo = XGetVisualInfo (dpy, VisualIDMask | VisualScreenMask,
++      vinfo_template.depth = 32;
++      vinfo = XGetVisualInfo (dpy, VisualScreenMask | VisualDepthMask,
+                              &vinfo_template, &n_visuals);
+       if (n_visuals <= 0)
+         fatal ("Can't get proper X visual info");
+
+       dpyinfo->n_planes = vinfo->depth;
++      dpyinfo->visual = vinfo->visual;
+       XFree (vinfo);
+     }
+ }
+@@ -6497,6 +6501,8 @@ x_create_tip_frame (struct x_display_info *dpyinfo, Lisp_Object parms)
+                          "cursorType", "CursorType", RES_TYPE_SYMBOL);
+   gui_default_parameter (f, parms, Qalpha, Qnil,
+                          "alpha", "Alpha", RES_TYPE_NUMBER);
++  gui_default_parameter (f, parms, Qalpha_background, Qnil,
++			 "alpha_background", "AlphaBackground", RES_TYPE_NUMBER);
+
+   /* Dimensions, especially FRAME_LINES (f), must be done via change_frame_size.
+      Change will not be effected unless different from the current
+@@ -7830,6 +7836,7 @@ DEFUN ("x-gtk-debug", Fx_gtk_debug, Sx_gtk_debug, 1, 1, 0,
+   x_set_z_group,
+   x_set_override_redirect,
+   gui_set_no_special_glyphs,
++  gui_set_alpha_background,
+ };
+
+ void
+diff --git a/src/xterm.c b/src/xterm.c
+index da2efffcca..de006601f1 100644
+--- a/src/xterm.c
++++ b/src/xterm.c
+@@ -429,9 +429,12 @@ x_set_cr_source_with_gc_background (struct frame *f, GC gc)
+
+   XGetGCValues (FRAME_X_DISPLAY (f), gc, GCBackground, &xgcv);
+   color.pixel = xgcv.background;
++
+   x_query_colors (f, &color, 1);
+-  cairo_set_source_rgb (FRAME_CR_CONTEXT (f), color.red / 65535.0,
+-			color.green / 65535.0, color.blue / 65535.0);
++  cairo_set_source_rgba (FRAME_CR_CONTEXT (f), color.red / 65535.0,
++                         color.green / 65535.0, color.blue / 65535.0, f->alpha_background);
++
++  cairo_set_operator (FRAME_CR_CONTEXT (f), CAIRO_OPERATOR_SOURCE);
+ }
+
+ static const cairo_user_data_key_t xlib_surface_key, saved_drawable_key;
+@@ -841,6 +844,56 @@ x_fill_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
+ #endif
+ }
+
++static void
++x_clear_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
++{
++  Display *dpy = FRAME_X_DISPLAY (f);
++#ifdef USE_CAIRO
++  cairo_t *cr;
++  XGCValues xgcv;
++
++  cr = x_begin_cr_clip (f, gc);
++  XGetGCValues (dpy, gc, GCFillStyle | GCStipple, &xgcv);
++  if (xgcv.fill_style == FillSolid
++      /* Invalid resource ID (one or more of the three most
++	 significant bits set to 1) is obtained if the GCStipple
++	 component has never been explicitly set.  It should be
++	 regarded as Pixmap of unspecified size filled with ones.  */
++      || (xgcv.stipple & ((Pixmap) 7 << (sizeof (Pixmap) * CHAR_BIT - 3))))
++    {
++      x_set_cr_source_with_gc_background (f, gc);
++      cairo_rectangle (cr, x, y, width, height);
++      cairo_fill (cr);
++    }
++  else
++    {
++      eassert (xgcv.fill_style == FillOpaqueStippled);
++      eassert (xgcv.stipple != None);
++      x_set_cr_source_with_gc_background (f, gc);
++      cairo_rectangle (cr, x, y, width, height);
++      cairo_fill_preserve (cr);
++
++      cairo_pattern_t *pattern = x_bitmap_stipple (f, xgcv.stipple);
++      if (pattern)
++	{
++	  x_set_cr_source_with_gc_foreground (f, gc);
++	  cairo_clip (cr);
++	  cairo_mask (cr, pattern);
++	}
++    }
++  x_end_cr_clip (f);
++#else
++
++  XGCValues xgcv;
++  XGetGCValues (dpy, gc, GCBackground, &xgcv);
++  XSetBackground (dpy, gc, xgcv.background);
++  XFillRectangle (FRAME_X_DISPLAY (f), FRAME_X_DRAWABLE (f),
++		  gc, x, y, width, height);
++
++  XSetBackground (dpy, gc, xgcv.background);
++#endif
++}
++
+ static void
+ x_draw_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
+ {
+@@ -1728,12 +1781,7 @@ x_compute_glyph_string_overhangs (struct glyph_string *s)
+ static void
+ x_clear_glyph_string_rect (struct glyph_string *s, int x, int y, int w, int h)
+ {
+-  Display *display = FRAME_X_DISPLAY (s->f);
+-  XGCValues xgcv;
+-  XGetGCValues (display, s->gc, GCForeground | GCBackground, &xgcv);
+-  XSetForeground (display, s->gc, xgcv.background);
+-  x_fill_rectangle (s->f, s->gc, x, y, w, h);
+-  XSetForeground (display, s->gc, xgcv.foreground);
++  x_clear_rectangle (s->f, s->gc, x, y, w, h);
+ }

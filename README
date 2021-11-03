@@ -27,6 +27,8 @@ transparency <https://www.emacswiki.org/emacs/TransparentEmacs>
 I hope this hack can contribute to the conversation on feasability of a fully-fledged
 background-only-transparency feature in the future.
 
+The patch for this feature can be found in transparent_emacs.patch
+
 Håkon Flatval, Nov. 1st 2021
 
 _The original README for Emacs is provided below_
