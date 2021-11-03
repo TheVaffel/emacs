@@ -5021,21 +5021,21 @@ gui_set_alpha_background (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
   if (NILP (arg))
     alpha = 1.0;
   else if (FLOATP (arg))
-      {
-	  alpha = XFLOAT_DATA(arg);
-    printf("Setting alpha background with arg \n");
-	  if (! (0 <= alpha && alpha <= 1.0))
-	      args_out_of_range (make_float(0.0), make_float(1.0));
-      }
+    {
+      alpha = XFLOAT_DATA(arg);
+      printf("Setting alpha background with arg \n");
+      if (! (0 <= alpha && alpha <= 1.0))
+	args_out_of_range (make_float(0.0), make_float(1.0));
+    }
   else if (FIXNUMP (arg))
-      {
-	  EMACS_INT ialpha = XFIXNUM (arg);
-	  if (! (0 <= ialpha && ialpha <= 100))
-	      args_out_of_range (make_fixnum (0), make_fixnum (100));
-	  alpha = ialpha / 100.0;
-      }
+    {
+      EMACS_INT ialpha = XFIXNUM (arg);
+      if (! (0 <= ialpha && ialpha <= 100))
+	args_out_of_range (make_fixnum (0), make_fixnum (100));
+      alpha = ialpha / 100.0;
+    }
   else
-      wrong_type_argument (Qnumberp, arg);
+    wrong_type_argument (Qnumberp, arg);
 
   f->alpha_background = alpha;
 
