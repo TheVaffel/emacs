@@ -1,8 +1,8 @@
 diff --git a/src/frame.c b/src/frame.c
-index 289abe2f79..0592168f23 100644
+index 79a7c89e0d..61cd602189 100644
 --- a/src/frame.c
 +++ b/src/frame.c
-@@ -3776,6 +3776,7 @@ DEFUN ("set-frame-window-state-change", Fset_frame_window_state_change,
+@@ -3895,6 +3895,7 @@ DEFUN ("frame-scale-factor", Fframe_scale_factor, Sframe_scale_factor,
    {"z-group",			SYMBOL_INDEX (Qz_group)},
    {"override-redirect",		SYMBOL_INDEX (Qoverride_redirect)},
    {"no-special-glyphs",		SYMBOL_INDEX (Qno_special_glyphs)},
@@ -10,10 +10,10 @@ index 289abe2f79..0592168f23 100644
  #ifdef NS_IMPL_COCOA
    {"ns-appearance",		SYMBOL_INDEX (Qns_appearance)},
    {"ns-transparent-titlebar",	SYMBOL_INDEX (Qns_transparent_titlebar)},
-@@ -4883,6 +4884,34 @@ gui_set_alpha (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
+@@ -5012,6 +5013,33 @@ gui_set_alpha (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
      }
  }
-
+ 
 +void
 +gui_set_alpha_background (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
 +{
@@ -24,7 +24,6 @@ index 289abe2f79..0592168f23 100644
 +  else if (FLOATP (arg))
 +    {
 +      alpha = XFLOAT_DATA(arg);
-+      printf("Setting alpha background with arg \n");
 +      if (! (0 <= alpha && alpha <= 1.0))
 +	args_out_of_range (make_float(0.0), make_float(1.0));
 +    }
@@ -42,25 +41,25 @@ index 289abe2f79..0592168f23 100644
 +
 +  SET_FRAME_GARBAGED (f);
 +}
-
+ 
  /**
   * gui_set_no_special_glyphs:
-@@ -5976,6 +6005,7 @@ syms_of_frame (void)
+@@ -6079,6 +6107,7 @@ syms_of_frame (void)
  #endif
-
+ 
    DEFSYM (Qalpha, "alpha");
 +  DEFSYM (Qalpha_background, "alpha-background");
    DEFSYM (Qauto_lower, "auto-lower");
    DEFSYM (Qauto_raise, "auto-raise");
    DEFSYM (Qborder_color, "border-color");
 diff --git a/src/frame.h b/src/frame.h
-index bfe04b276a..7f8ef15ef4 100644
+index 3dd76805dd..ca44db7fbe 100644
 --- a/src/frame.h
 +++ b/src/frame.h
-@@ -623,6 +623,10 @@ #define EMACS_FRAME_H
+@@ -635,6 +635,10 @@ #define EMACS_FRAME_H
       Negative values mean not to change alpha.  */
    double alpha[2];
-
+ 
 +  /* Background opacity, currently only tested to work with
 +     GTK3+cairo */
 +  double alpha_background;
@@ -68,22 +67,33 @@ index bfe04b276a..7f8ef15ef4 100644
    /* Exponent for gamma correction of colors.  1/(VIEWING_GAMMA *
       SCREEN_GAMMA) where viewing_gamma is 0.4545 and SCREEN_GAMMA is a
       frame parameter.  0 means don't do gamma correction.  */
-@@ -1632,6 +1636,7 @@ #define EMACS_CLASS "Emacs"
- extern long gui_figure_window_size (struct frame *, Lisp_Object, bool, bool, int *, int *);
-
+@@ -1649,6 +1653,7 @@ #define EMACS_CLASS "Emacs"
+ extern long gui_figure_window_size (struct frame *, Lisp_Object, bool, bool);
+ 
  extern void gui_set_alpha (struct frame *, Lisp_Object, Lisp_Object);
 +extern void gui_set_alpha_background (struct frame *, Lisp_Object, Lisp_Object);
  extern void gui_set_no_special_glyphs (struct frame *, Lisp_Object, Lisp_Object);
-
+ 
  extern void validate_x_resource_name (void);
 diff --git a/src/gtkutil.c b/src/gtkutil.c
-index 825fbe1d45..efd60768dd 100644
+index a9eabf47d8..94c06e51ca 100644
 --- a/src/gtkutil.c
 +++ b/src/gtkutil.c
-@@ -1333,6 +1333,11 @@ xg_create_frame_widgets (struct frame *f)
+@@ -1211,6 +1211,10 @@ xg_create_frame_widgets (struct frame *f)
+   else
+     wtop = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+ 
++  /* This prevents GTK from painting the window's background, which
++     would interfere with transparent background in some environments */
++  gtk_widget_set_app_paintable(wtop, TRUE);
++
+   /* gtk_window_set_has_resize_grip is a Gtk+ 3.0 function but Ubuntu
+      has backported it to Gtk+ 2.0 and they add the resize grip for
+      Gtk+ 2.0 applications also.  But it has a bug that makes Emacs loop
+@@ -1318,6 +1322,11 @@ xg_create_frame_widgets (struct frame *f)
                           | GDK_STRUCTURE_MASK
                           | GDK_VISIBILITY_NOTIFY_MASK);
-
+ 
 +  GdkScreen *screen = gtk_widget_get_screen (wtop);
 +  GdkVisual *visual = gdk_screen_get_rgba_visual(screen);
 +  gtk_widget_set_visual(wtop, visual);
@@ -92,66 +102,66 @@ index 825fbe1d45..efd60768dd 100644
    /* Must realize the windows so the X window gets created.  It is used
       by callers of this function.  */
    gtk_widget_realize (wfixed);
-@@ -1373,7 +1378,6 @@ xg_create_frame_widgets (struct frame *f)
+@@ -1358,7 +1367,6 @@ xg_create_frame_widgets (struct frame *f)
    g_signal_connect (wtop, "query-tooltip", G_CALLBACK (qttip_cb), f);
-
+ 
    {
 -    GdkScreen *screen = gtk_widget_get_screen (wtop);
      GtkSettings *gs = gtk_settings_get_for_screen (screen);
      /* Only connect this signal once per screen.  */
      if (! g_signal_handler_find (G_OBJECT (gs),
 diff --git a/src/xfns.c b/src/xfns.c
-index ab04396703..f4b1771e87 100644
+index 785ae3baca..a325820739 100644
 --- a/src/xfns.c
 +++ b/src/xfns.c
-@@ -4082,6 +4082,8 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame,
+@@ -4066,6 +4066,8 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame,
                           RES_TYPE_NUMBER);
    gui_default_parameter (f, parms, Qalpha, Qnil,
                           "alpha", "Alpha", RES_TYPE_NUMBER);
 +  gui_default_parameter (f, parms, Qalpha_background, Qnil,
 +			 "alpha_background", "AlphaBackground", RES_TYPE_NUMBER);
-
+ 
    if (!NILP (parent_frame))
      {
-@@ -5683,12 +5685,14 @@ select_visual (struct x_display_info *dpyinfo)
-
+@@ -5685,12 +5687,14 @@ select_visual (struct x_display_info *dpyinfo)
+ 
        vinfo_template.visualid = XVisualIDFromVisual (dpyinfo->visual);
        vinfo_template.screen = XScreenNumberOfScreen (screen);
 -      vinfo = XGetVisualInfo (dpy, VisualIDMask | VisualScreenMask,
 +      vinfo_template.depth = 32;
 +      vinfo = XGetVisualInfo (dpy, VisualScreenMask | VisualDepthMask,
-                              &vinfo_template, &n_visuals);
+ 			      &vinfo_template, &n_visuals);
        if (n_visuals <= 0)
-         fatal ("Can't get proper X visual info");
-
+ 	fatal ("Can't get proper X visual info");
+ 
        dpyinfo->n_planes = vinfo->depth;
 +      dpyinfo->visual = vinfo->visual;
        XFree (vinfo);
      }
  }
-@@ -6497,6 +6501,8 @@ x_create_tip_frame (struct x_display_info *dpyinfo, Lisp_Object parms)
+@@ -6496,6 +6500,8 @@ x_create_tip_frame (struct x_display_info *dpyinfo, Lisp_Object parms)
                           "cursorType", "CursorType", RES_TYPE_SYMBOL);
    gui_default_parameter (f, parms, Qalpha, Qnil,
                           "alpha", "Alpha", RES_TYPE_NUMBER);
 +  gui_default_parameter (f, parms, Qalpha_background, Qnil,
 +			 "alpha_background", "AlphaBackground", RES_TYPE_NUMBER);
-
-   /* Dimensions, especially FRAME_LINES (f), must be done via change_frame_size.
-      Change will not be effected unless different from the current
-@@ -7830,6 +7836,7 @@ DEFUN ("x-gtk-debug", Fx_gtk_debug, Sx_gtk_debug, 1, 1, 0,
+ 
+   /* Add `tooltip' frame parameter's default value. */
+   if (NILP (Fframe_parameter (frame, Qtooltip)))
+@@ -7825,6 +7831,7 @@ DEFUN ("x-gtk-debug", Fx_gtk_debug, Sx_gtk_debug, 1, 1, 0,
    x_set_z_group,
    x_set_override_redirect,
    gui_set_no_special_glyphs,
 +  gui_set_alpha_background,
  };
-
+ 
  void
 diff --git a/src/xterm.c b/src/xterm.c
-index da2efffcca..de006601f1 100644
+index 24f12d6e24..2b68437fc9 100644
 --- a/src/xterm.c
 +++ b/src/xterm.c
 @@ -429,9 +429,12 @@ x_set_cr_source_with_gc_background (struct frame *f, GC gc)
-
+ 
    XGetGCValues (FRAME_X_DISPLAY (f), gc, GCBackground, &xgcv);
    color.pixel = xgcv.background;
 +
@@ -163,12 +173,12 @@ index da2efffcca..de006601f1 100644
 +
 +  cairo_set_operator (FRAME_CR_CONTEXT (f), CAIRO_OPERATOR_SOURCE);
  }
-
+ 
  static const cairo_user_data_key_t xlib_surface_key, saved_drawable_key;
 @@ -841,6 +844,56 @@ x_fill_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
  #endif
  }
-
+ 
 +static void
 +x_clear_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
 +{
@@ -222,7 +232,7 @@ index da2efffcca..de006601f1 100644
  static void
  x_draw_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
  {
-@@ -1728,12 +1781,7 @@ x_compute_glyph_string_overhangs (struct glyph_string *s)
+@@ -1720,12 +1773,7 @@ x_compute_glyph_string_overhangs (struct glyph_string *s)
  static void
  x_clear_glyph_string_rect (struct glyph_string *s, int x, int y, int w, int h)
  {
@@ -234,3 +244,5 @@ index da2efffcca..de006601f1 100644
 -  XSetForeground (display, s->gc, xgcv.foreground);
 +  x_clear_rectangle (s->f, s->gc, x, y, w, h);
  }
+ 
+ 
