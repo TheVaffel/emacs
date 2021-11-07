@@ -5023,7 +5023,6 @@ gui_set_alpha_background (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
   else if (FLOATP (arg))
     {
       alpha = XFLOAT_DATA(arg);
-      printf("Setting alpha background with arg \n");
       if (! (0 <= alpha && alpha <= 1.0))
 	args_out_of_range (make_float(0.0), make_float(1.0));
     }
