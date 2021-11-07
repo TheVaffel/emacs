@@ -1211,6 +1211,10 @@ xg_create_frame_widgets (struct frame *f)
   else
     wtop = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 
+  /* This prevents GTK from painting the window's background, which
+     would interfere with transparent background in some environments */
+  gtk_widget_set_app_paintable(wtop, TRUE);
+
   /* gtk_window_set_has_resize_grip is a Gtk+ 3.0 function but Ubuntu
      has backported it to Gtk+ 2.0 and they add the resize grip for
      Gtk+ 2.0 applications also.  But it has a bug that makes Emacs loop
