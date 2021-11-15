@@ -3212,7 +3212,7 @@ x_window (struct frame *f)
   XSetWindowAttributes attributes;
   unsigned long attribute_mask;
 
-  attributes.background_pixel = FRAME_BACKGROUND_PIXEL (f);
+  attributes.background_pixel = 0; // ((1 << 24) - 1) & FRAME_BACKGROUND_PIXEL (f);
   attributes.border_pixel = f->output_data.x->border_pixel;
   attributes.bit_gravity = StaticGravity;
   attributes.backing_store = NotUseful;
@@ -3409,13 +3409,16 @@ x_make_gc (struct frame *f)
   /* Create the GCs of this frame.
      Note that many default values are used.  */
 
+  // gc_values.plane_mask = ( 1 << 24 ) - 1;
+  gc_values.plane_mask = ~0;
+
   gc_values.foreground = FRAME_FOREGROUND_PIXEL (f);
-  gc_values.background = FRAME_BACKGROUND_PIXEL (f);
+  gc_values.background = 0; // FRAME_BACKGROUND_PIXEL (f);
   gc_values.line_width = 0;	/* Means 1 using fast algorithm.  */
   f->output_data.x->normal_gc
     = XCreateGC (FRAME_X_DISPLAY (f),
                  FRAME_X_DRAWABLE (f),
-		 GCLineWidth | GCForeground | GCBackground,
+		 GCLineWidth | GCForeground | GCBackground | GCPlaneMask,
 		 &gc_values);
 
   /* Reverse video style.  */
@@ -3424,7 +3427,7 @@ x_make_gc (struct frame *f)
   f->output_data.x->reverse_gc
     = XCreateGC (FRAME_X_DISPLAY (f),
                  FRAME_X_DRAWABLE (f),
-		 GCForeground | GCBackground | GCLineWidth,
+		 GCForeground | GCBackground | GCLineWidth | GCPlaneMask,
 		 &gc_values);
 
   /* Cursor has cursor-color background, background-color foreground.  */
@@ -3434,7 +3437,7 @@ x_make_gc (struct frame *f)
   f->output_data.x->cursor_gc
     = XCreateGC (FRAME_X_DISPLAY (f), FRAME_X_DRAWABLE (f),
 		 (GCForeground | GCBackground
-		  | GCFillStyle | GCLineWidth),
+		  | GCFillStyle | GCLineWidth | GCPlaneMask),
 		 &gc_values);
 
   /* Create the gray border tile used when the pointer is not in
@@ -3814,7 +3817,7 @@ This function is an internal primitive--use `make-frame' instead.  */)
     FRAME_FOREGROUND_PIXEL (f)
       = x_decode_color (f, black, BLACK_PIX_DEFAULT (f));
     FRAME_BACKGROUND_PIXEL (f)
-      = x_decode_color (f, black, BLACK_PIX_DEFAULT (f));
+	= 0; // x_decode_color (f, black, BLACK_PIX_DEFAULT (f));
     f->output_data.x->cursor_pixel
       = x_decode_color (f, black, BLACK_PIX_DEFAULT (f));
     f->output_data.x->cursor_foreground_pixel

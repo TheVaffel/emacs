@@ -803,10 +803,11 @@ x_reset_clip_rectangles (struct frame *f, GC gc)
 static void
 x_fill_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
 {
-#ifdef USE_CAIRO
   Display *dpy = FRAME_X_DISPLAY (f);
-  cairo_t *cr;
   XGCValues xgcv;
+
+#ifdef USE_CAIRO
+  cairo_t *cr;
 
   cr = x_begin_cr_clip (f, gc);
   XGetGCValues (dpy, gc, GCFillStyle | GCStipple, &xgcv);
@@ -839,8 +840,11 @@ x_fill_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
     }
   x_end_cr_clip (f);
 #else
+  XGetGCValues (dpy, gc, GCForeground, &xgcv);
+  XSetForeground (dpy, gc, (255u << 24u) | xgcv.foreground);
   XFillRectangle (FRAME_X_DISPLAY (f), FRAME_X_DRAWABLE (f),
 		  gc, x, y, width, height);
+  XSetForeground (dpy, gc, xgcv.foreground);
 #endif
 }
 
@@ -876,7 +880,7 @@ x_clear_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
       cairo_pattern_t *pattern = x_bitmap_stipple (f, xgcv.stipple);
       if (pattern)
 	{
-	  x_set_cr_source_with_gc_foreground (f, gc);
+	  x_set_cr_source_with_gc_background (f, gc);
 	  cairo_clip (cr);
 	  cairo_mask (cr, pattern);
 	}
@@ -885,12 +889,12 @@ x_clear_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
 #else
 
   XGCValues xgcv;
-  XGetGCValues (dpy, gc, GCBackground, &xgcv);
-  XSetBackground (dpy, gc, xgcv.background);
+  XGetGCValues (dpy, gc, GCForeground | GCBackground, &xgcv);
+  XSetForeground (dpy, gc, (255 << 24) | xgcv.background);
   XFillRectangle (FRAME_X_DISPLAY (f), FRAME_X_DRAWABLE (f),
 		  gc, x, y, width, height);
 
-  XSetBackground (dpy, gc, xgcv.background);
+  XSetBackground (dpy, gc, xgcv.foreground);
 #endif
 }
 
@@ -912,6 +916,16 @@ x_draw_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
 #endif
 }
 
+static unsigned int
+argb_from_rgb (unsigned int rgb, double alpha) {
+    unsigned char alpha_u8 = (unsigned char)(255 * alpha);
+    return (alpha_u8 << 24) |
+	(((((rgb >> 16) & 255) * alpha_u8) >> 8) << 16) |
+	(((((rgb >> 8 ) & 255) * alpha_u8) >> 8) << 8 ) |
+	(((  rgb        & 255) * alpha_u8) >> 8)        ;
+}
+
+
 static void
 x_clear_window (struct frame *f)
 {
@@ -923,10 +937,17 @@ x_clear_window (struct frame *f)
   cairo_paint (cr);
   x_end_cr_clip (f);
 #else
+  Display* dpy = FRAME_X_DISPLAY (f);
+  int screen = XDefaultScreen (dpy);
+  GC gc = XDefaultGC(dpy, screen);
+
   if (FRAME_X_DOUBLE_BUFFERED_P (f))
     x_clear_area (f, 0, 0, FRAME_PIXEL_WIDTH (f), FRAME_PIXEL_HEIGHT (f));
-  else
+  else {
+      unsigned int color = argb_from_rgb(FRAME_BACKGROUND_PIXEL (f), f->alpha_background);
+      XSetBackground (dpy, gc, color);
     XClearWindow (FRAME_X_DISPLAY (f), FRAME_X_WINDOW (f));
+  }
 #endif
 }
 
@@ -1500,7 +1521,7 @@ x_draw_fringe_bitmap (struct window *w, struct glyph_row *row, struct draw_fring
       Drawable drawable = FRAME_X_DRAWABLE (f);
       char *bits;
       Pixmap pixmap, clipmask = (Pixmap) 0;
-      int depth = DefaultDepthOfScreen (FRAME_X_SCREEN (f));
+      int depth = 32; // DefaultDepthOfScreen (FRAME_X_SCREEN (f));
       XGCValues gcv;
 
       if (p->wd > 8)
@@ -1531,6 +1552,10 @@ x_draw_fringe_bitmap (struct window *w, struct glyph_row *row, struct draw_fring
 
       XCopyArea (display, pixmap, drawable, gc, 0, 0,
 		 p->wd, p->h, p->x, p->y);
+      printf("After XCopyArea, before sync 0\n");
+      XSync(display, false);
+      printf("After XCopyArea, after sync\n");
+
       XFreePixmap (display, pixmap);
 
       if (p->overlay_p)
@@ -3073,9 +3098,14 @@ x_composite_image (struct glyph_string *s, Pixmap dest,
       XRenderPictureAttributes attr;
 
       default_format = XRenderFindVisualFormat (display,
-                                                DefaultVisual (display, 0));
+                                                /* DefaultVisual (display, 0) */ FRAME_X_VISUAL (s->f));
+
       destination = XRenderCreatePicture (display, dest,
                                           default_format, 0, &attr);
+
+      printf("[xterm.c:x_composite_image] Before sync, after XRenderCreatePicture\n");
+      XSync(display, false);
+      printf("[xterm.c:x_composite_image] After sync, after XRenderCreatePicture\n");
 
       XRenderComposite (display, s->img->mask_picture ? PictOpOver : PictOpSrc,
                         s->img->picture, s->img->mask_picture, destination,
@@ -3093,6 +3123,10 @@ x_composite_image (struct glyph_string *s, Pixmap dest,
 	     dest, s->gc,
 	     srcX, srcY,
 	     width, height, dstX, dstY);
+
+      printf("After XCopyArea, before sync 1\n");
+      XSync(display, false);
+      printf("After XCopyArea, after sync\n");
 }
 #endif	/* !USE_CAIRO */
 
@@ -3361,6 +3395,10 @@ x_draw_image_foreground_1 (struct glyph_string *s, Pixmap pixmap)
 		     s->slice.x, s->slice.y,
 		     s->slice.width, s->slice.height, x, y);
 
+      printf("After XCopyArea, before sync 2\n");
+      XSync(display, false);
+      printf("After XCopyArea, after sync\n");
+
 	  /* When the image has a mask, we can expect that at
 	     least part of a mouse highlight or a block cursor will
 	     be visible.  If the image doesn't have a mask, make
@@ -3517,6 +3555,11 @@ x_draw_image_glyph_string (struct glyph_string *s)
       x_set_glyph_string_clipping (s);
       XCopyArea (display, pixmap, FRAME_X_DRAWABLE (s->f), s->gc,
 		 0, 0, s->background_width, s->height, s->x, s->y);
+
+
+      printf("After XCopyArea, before sync 3\n");
+      XSync(display, false);
+      printf("After XCopyArea, after sync\n");
       XFreePixmap (display, pixmap);
     }
   else
@@ -4066,6 +4109,10 @@ x_shift_glyphs_for_insert (struct frame *f, int x, int y, int width, int height,
 	     f->output_data.x->normal_gc,
 	     x, y, width, height,
 	     x + shift_by, y);
+
+      printf("After XCopyArea, before sync 4\n");
+      XSync(FRAME_X_DISPLAY(f), false);
+      printf("After XCopyArea, after sync\n");
 }
 
 /* Delete N glyphs at the nominal cursor position.  Not implemented
@@ -4103,14 +4150,33 @@ x_clear_area (struct frame *f, int x, int y, int width, int height)
   cairo_fill (cr);
   x_end_cr_clip (f);
 #else
-  if (FRAME_X_DOUBLE_BUFFERED_P (f))
-    XFillRectangle (FRAME_X_DISPLAY (f),
+  Display* dpy = FRAME_X_DISPLAY (f);
+  XGCValues xgcv;
+  if (FRAME_X_DOUBLE_BUFFERED_P (f)) {
+
+    GC gc = f->output_data.x->reverse_gc;
+
+    XGetGCValues (dpy, gc, GCForeground, &xgcv);
+    unsigned int draw_color = argb_from_rgb (xgcv.foreground, f->alpha_background);
+
+    XSetForeground (dpy, gc, draw_color);
+    XFillRectangle (dpy,
 		    FRAME_X_DRAWABLE (f),
-		    f->output_data.x->reverse_gc,
+		    gc,
 		    x, y, width, height);
-  else
-    x_clear_area1 (FRAME_X_DISPLAY (f), FRAME_X_WINDOW (f),
+
+  XSetForeground (dpy, gc, xgcv.foreground);
+  } else {
+      XGCValues xgcv;
+      GC gc = f->output_data.x->normal_gc;
+      XGetGCValues (dpy, gc, GCBackground, &xgcv);
+      XSetBackground (dpy, gc, 0x10ff1010);
+
+    x_clear_area1 (dpy, FRAME_X_WINDOW (f),
                    x, y, width, height, False);
+    XSetBackground (dpy, gc, xgcv.background);
+
+  }
 #endif
 }
 
@@ -4536,6 +4602,10 @@ x_scroll_run (struct window *w, struct run *run)
 		     x, from_y,
 		     width, height,
 		     x, to_y);
+
+      printf("After XCopyArea, before sync 5\n");
+      XSync(display, false);
+      printf("After XCopyArea, after sync\n");
 	  cairo_surface_mark_dirty_rectangle (surface, x, to_y, width, height);
 	}
       else
@@ -4568,6 +4638,10 @@ x_scroll_run (struct window *w, struct run *run)
 	       width, height,
 	       x, to_y);
 
+
+      printf("After XCopyArea, before sync 6\n");
+      XSync(FRAME_X_DISPLAY (f), false);
+      printf("After XCopyArea, after sync\n");
   unblock_input ();
 }
 
@@ -13202,6 +13276,7 @@ x_term_init (Lisp_Object display_name, char *xrm_option, char *resource_name)
   /* See if a private colormap is requested.  */
   if (dpyinfo->visual == DefaultVisualOfScreen (dpyinfo->screen))
     {
+	printf("DPYINFO visual is defaultVisual of screen\n");
       if (dpyinfo->visual->class == PseudoColor)
 	{
 	  AUTO_STRING (privateColormap, "privateColormap");

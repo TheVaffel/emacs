@@ -349,6 +349,27 @@ string_width (XlwMenuWidget mw, char *s)
 
 }
 
+static Visual*
+get_preferred_visual (Display *dsp, int screen) {
+
+    // Prefere 32 bit depth
+    int wanted_depth = 32;
+
+    unsigned long mask = VisualDepthMask;
+
+    XVisualInfo vinfo;
+    vinfo.depth = wanted_depth;
+
+    int num_ret;
+    XVisualInfo *info_p = XGetVisualInfo(dsp, mask, &vinfo, &num_ret);
+
+    if (num_ret == 0) {
+	return DefaultVisual (dsp, screen);
+    }
+
+    return info_p[0].visual;
+}
+
 #if defined USE_CAIRO || defined HAVE_XFT
 #define MENU_FONT_HEIGHT(mw)                                    \
   ((mw)->menu.xft_font != NULL                                  \
@@ -1170,9 +1191,13 @@ display_menu (XlwMenuWidget mw,
 
   ws = &mw->menu.windows [level];
 
-  if (!just_compute_p)
+  if (!just_compute_p) {
     XFillRectangle (XtDisplay (mw), ws->pixmap, mw->menu.background_gc,
                     0, 0, ws->width, ws->height);
+
+    XGCValues vals;
+    XGetGCValues (XtDisplay (mw), mw->menu.background_gc, GCFunction | GCPlaneMask | GCBackground | GCForeground, &vals);
+  }
 
   for (val = mw->menu.old_stack [level]->contents; val; val = val->next)
     {
@@ -1417,16 +1442,20 @@ create_pixmap_for_menu (window_state* ws, XlwMenuWidget mw)
     }
   ws->pixmap = XCreatePixmap (XtDisplay (ws->w), ws->window,
                               ws->width, ws->height,
-                              DefaultDepthOfScreen (XtScreen (ws->w)));
+                              32 /* DefaultDepthOfScreen (XtScreen (ws->w)) */);
+
+
 #if defined USE_CAIRO || defined HAVE_XFT
   if (ws->xft_draw)
     XftDrawDestroy (ws->xft_draw);
   if (mw->menu.xft_font)
     {
       int screen = XScreenNumberOfScreen (mw->core.screen);
+      Visual *visual = get_preferred_visual (XtDisplay (ws->w), screen);
+
       ws->xft_draw = XftDrawCreate (XtDisplay (ws->w),
                                     ws->pixmap,
-                                    DefaultVisual (XtDisplay (ws->w), screen),
+                                    visual,
                                     mw->core.colormap);
     }
   else
@@ -1597,7 +1626,7 @@ make_drawing_gcs (XlwMenuWidget mw)
 {
   XGCValues xgcv;
   float scale;
-  XtGCMask mask = GCForeground | GCBackground;
+  XtGCMask mask = GCForeground | GCBackground | GCPlaneMask;
 
 #ifdef HAVE_X_I18N
   if (!mw->menu.fontSet && mw->menu.font)
@@ -1612,6 +1641,8 @@ make_drawing_gcs (XlwMenuWidget mw)
       mask |= GCFont;
     }
 #endif
+  xgcv.plane_mask = (1 << 24) - 1;
+
   xgcv.foreground = mw->menu.foreground;
   xgcv.background = mw->core.background_pixel;
   mw->menu.foreground_gc = XtGetGC ((Widget)mw, mask, &xgcv);
@@ -2191,13 +2222,16 @@ XlwMenuSetValues (Widget current, Widget request, Widget new,
             XftDrawDestroy (newmw->menu.windows [i].xft_draw);
           newmw->menu.windows [i].xft_draw = 0;
         }
-      if (newmw->menu.xft_font)
-      for (i = 0; i < newmw->menu.windows_length; i++)
-          newmw->menu.windows [i].xft_draw
-            = XftDrawCreate (XtDisplay (newmw),
-                             newmw->menu.windows [i].window,
-                             DefaultVisual (XtDisplay (newmw), screen),
-                             newmw->core.colormap);
+      if (newmw->menu.xft_font) {
+
+	  Visual *visual = get_preferred_visual (XtDisplay (newmw), screen);
+	  for (i = 0; i < newmw->menu.windows_length; i++)
+	      newmw->menu.windows [i].xft_draw
+		  = XftDrawCreate (XtDisplay (newmw),
+				   newmw->menu.windows [i].window,
+				   visual,
+				   newmw->core.colormap);
+      }
     }
 #endif
 #ifdef HAVE_X_I18N
