@@ -480,6 +480,11 @@ xftfont_draw (struct glyph_string *s, int from, int to, int x, int y,
   if (with_background)
     {
       int height = FONT_HEIGHT (s->font), ascent = FONT_BASE (s->font);
+      bg.pixel = argb_from_rgb(bg.pixel, f->alpha_background);
+      bg.color.red = (unsigned short)(bg.color.red * f->alpha_background);
+      bg.color.green = (unsigned short)(bg.color.green * f->alpha_background);
+      bg.color.blue = (unsigned short)(bg.color.blue * f->alpha_background);
+      bg.color.alpha = (unsigned short)(((1 << 16) - 1) * f->alpha_background);
 
       /* Font's global height and ascent values might be
 	 preposterously large for some fonts.  We fix here the case

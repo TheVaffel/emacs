@@ -995,6 +995,7 @@ xfont_draw (struct glyph_string *s, int from, int to, int x, int y,
   int len = to - from;
   GC gc = s->gc;
   int i;
+  XGCValues xgcv;
 
   if (s->gc != s->face->gc)
     {
@@ -1012,6 +1013,8 @@ xfont_draw (struct glyph_string *s, int from, int to, int x, int y,
       block_input ();
       if (with_background)
 	{
+	  XGetGCValues (display, gc, GCBackground, &xgcv);
+	  XSetBackground (display, gc, argb_from_rgb (xgcv.background, s->f->alpha_background));
 	  if (s->padding_p)
 	    for (i = 0; i < len; i++)
               XDrawImageString (display, FRAME_X_DRAWABLE (s->f),
@@ -1019,6 +1022,7 @@ xfont_draw (struct glyph_string *s, int from, int to, int x, int y,
 	  else
             XDrawImageString (display, FRAME_X_DRAWABLE (s->f),
 			      gc, x, y, str, len);
+	  XSetBackground (display, gc, xgcv.background);
 	}
       else
 	{

@@ -887,14 +887,13 @@ x_clear_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
     }
   x_end_cr_clip (f);
 #else
-
   XGCValues xgcv;
   XGetGCValues (dpy, gc, GCForeground | GCBackground, &xgcv);
-  XSetForeground (dpy, gc, (255 << 24) | xgcv.background);
+  XSetForeground (dpy, gc, argb_from_rgb(xgcv.background, f->alpha_background));
   XFillRectangle (FRAME_X_DISPLAY (f), FRAME_X_DRAWABLE (f),
 		  gc, x, y, width, height);
 
-  XSetBackground (dpy, gc, xgcv.foreground);
+  XSetForeground (dpy, gc, xgcv.foreground);
 #endif
 }
 
@@ -914,15 +913,6 @@ x_draw_rectangle (struct frame *f, GC gc, int x, int y, int width, int height)
   XDrawRectangle (FRAME_X_DISPLAY (f), FRAME_X_DRAWABLE (f),
 		  gc, x, y, width, height);
 #endif
-}
-
-static unsigned int
-argb_from_rgb (unsigned int rgb, double alpha) {
-    unsigned char alpha_u8 = (unsigned char)(255 * alpha);
-    return (alpha_u8 << 24) |
-	(((((rgb >> 16) & 255) * alpha_u8) >> 8) << 16) |
-	(((((rgb >> 8 ) & 255) * alpha_u8) >> 8) << 8 ) |
-	(((  rgb        & 255) * alpha_u8) >> 8)        ;
 }
 
 
@@ -1552,10 +1542,6 @@ x_draw_fringe_bitmap (struct window *w, struct glyph_row *row, struct draw_fring
 
       XCopyArea (display, pixmap, drawable, gc, 0, 0,
 		 p->wd, p->h, p->x, p->y);
-      printf("After XCopyArea, before sync 0\n");
-      XSync(display, false);
-      printf("After XCopyArea, after sync\n");
-
       XFreePixmap (display, pixmap);
 
       if (p->overlay_p)
@@ -3103,10 +3089,6 @@ x_composite_image (struct glyph_string *s, Pixmap dest,
       destination = XRenderCreatePicture (display, dest,
                                           default_format, 0, &attr);
 
-      printf("[xterm.c:x_composite_image] Before sync, after XRenderCreatePicture\n");
-      XSync(display, false);
-      printf("[xterm.c:x_composite_image] After sync, after XRenderCreatePicture\n");
-
       XRenderComposite (display, s->img->mask_picture ? PictOpOver : PictOpSrc,
                         s->img->picture, s->img->mask_picture, destination,
                         srcX, srcY,
@@ -3123,10 +3105,6 @@ x_composite_image (struct glyph_string *s, Pixmap dest,
 	     dest, s->gc,
 	     srcX, srcY,
 	     width, height, dstX, dstY);
-
-      printf("After XCopyArea, before sync 1\n");
-      XSync(display, false);
-      printf("After XCopyArea, after sync\n");
 }
 #endif	/* !USE_CAIRO */
 
@@ -3395,10 +3373,6 @@ x_draw_image_foreground_1 (struct glyph_string *s, Pixmap pixmap)
 		     s->slice.x, s->slice.y,
 		     s->slice.width, s->slice.height, x, y);
 
-      printf("After XCopyArea, before sync 2\n");
-      XSync(display, false);
-      printf("After XCopyArea, after sync\n");
-
 	  /* When the image has a mask, we can expect that at
 	     least part of a mouse highlight or a block cursor will
 	     be visible.  If the image doesn't have a mask, make
@@ -3556,10 +3530,6 @@ x_draw_image_glyph_string (struct glyph_string *s)
       XCopyArea (display, pixmap, FRAME_X_DRAWABLE (s->f), s->gc,
 		 0, 0, s->background_width, s->height, s->x, s->y);
 
-
-      printf("After XCopyArea, before sync 3\n");
-      XSync(display, false);
-      printf("After XCopyArea, after sync\n");
       XFreePixmap (display, pixmap);
     }
   else
@@ -4109,10 +4079,6 @@ x_shift_glyphs_for_insert (struct frame *f, int x, int y, int width, int height,
 	     f->output_data.x->normal_gc,
 	     x, y, width, height,
 	     x + shift_by, y);
-
-      printf("After XCopyArea, before sync 4\n");
-      XSync(FRAME_X_DISPLAY(f), false);
-      printf("After XCopyArea, after sync\n");
 }
 
 /* Delete N glyphs at the nominal cursor position.  Not implemented
@@ -4603,9 +4569,6 @@ x_scroll_run (struct window *w, struct run *run)
 		     width, height,
 		     x, to_y);
 
-      printf("After XCopyArea, before sync 5\n");
-      XSync(display, false);
-      printf("After XCopyArea, after sync\n");
 	  cairo_surface_mark_dirty_rectangle (surface, x, to_y, width, height);
 	}
       else
@@ -4638,10 +4601,6 @@ x_scroll_run (struct window *w, struct run *run)
 	       width, height,
 	       x, to_y);
 
-
-      printf("After XCopyArea, before sync 6\n");
-      XSync(FRAME_X_DISPLAY (f), false);
-      printf("After XCopyArea, after sync\n");
   unblock_input ();
 }
 

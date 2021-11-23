@@ -1211,6 +1211,19 @@ output_cursor_to (struct window *w, int vpos, int hpos, int y, int x)
   w->output_cursor.y = y;
 }
 
+/*
+ * Convert TrueColor RGB string to ARGB. RGB components must be pre-multiplied
+ * by alpha component
+ */
+INLINE unsigned int
+argb_from_rgb (unsigned int rgb, double alpha) {
+    unsigned char alpha_u8 = (unsigned char)(255 * alpha);
+    return (alpha_u8 << 24) |
+	(((((rgb >> 16) & 255) * alpha_u8) >> 8) << 16) |
+	(((((rgb >> 8 ) & 255) * alpha_u8) >> 8) << 8 ) |
+	(((  rgb        & 255) * alpha_u8) >> 8)        ;
+}
+
 INLINE_HEADER_END
 
 #endif /* not WINDOW_H_INCLUDED */
